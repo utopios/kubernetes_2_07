@@ -8,9 +8,17 @@ spec:
   containers:
   - name: myapod
     image: nginx:latest
+    imagePullPolicy: IfNotPresent
+    command: ["nginx", "-g", "daemon off;"]
+    env:
+      - name: ENV_VAR_NAME
+        value: "ENV_VAR_VALUE"
     resources:
       limits:
         memory: "128Mi"
         cpu: "500m"
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
     ports:
       - containerPort: 80
