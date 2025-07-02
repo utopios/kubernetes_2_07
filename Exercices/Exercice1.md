@@ -16,6 +16,15 @@ Créez un fichier **ghost_deployment.yaml** définissant un Deployment ayant les
 
 Créez ensuite la ressource spécifiée.
 
+```bash
+kubectl apply -f Exercices/solutions/exercice1.yml  
+```
+
+***Pour tester***
+```bash
+kubectl port-forward deployment/ghost-deployment 2368:2368
+```
+
 ### 2. Vérification du statut initial
 
 À l'aide de *kubectl*, examinez le statut du Deployment *ghost* et vérifiez l'historique des révisions.
