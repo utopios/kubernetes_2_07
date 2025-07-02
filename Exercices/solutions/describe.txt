@@ -1,0 +1,35 @@
+Name:                   ghost-deployment
+Namespace:              default
+CreationTimestamp:      Wed, 02 Jul 2025 14:37:58 +0200
+Labels:                 <none>
+Annotations:            deployment.kubernetes.io/revision: 1
+                        kubernetes.io/change-cause: initial ghost application v4.0
+Selector:               app=ghost
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  1 max unavailable, 1 max surge
+Pod Template:
+  Labels:  app=ghost
+  Containers:
+   ghost:
+    Image:      ghost:4
+    Port:       2368/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:        200m
+      memory:     256Mi
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   ghost-deployment-7f4bb4f79b (3/3 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  5m33s  deployment-controller  Scaled up replica set ghost-deployment-7f4bb4f79b to 3

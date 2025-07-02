@@ -3,8 +3,8 @@ kind: Deployment
 metadata:
   name: ghost-deployment
   annotations:
-    kubernetes.io/change-cause: "initial ghost application v4.0"
-    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: "update ghost application v5.0"
+    deployment.kubernetes.io/revision: "2"
 spec:
   replicas: 3
   revisionHistoryLimit: 10
@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: ghost
-        image: ghost:4
+        image: ghost:5
         resources:
           limits:
             memory: "256Mi"

@@ -28,12 +28,22 @@ kubectl port-forward deployment/ghost-deployment 2368:2368
 ### 2. Vérification du statut initial
 
 À l'aide de *kubectl*, examinez le statut du Deployment *ghost* et vérifiez l'historique des révisions.
+
+```bash
+kubectl get deployment/ghost-deployment
+kubectl describe deployment/ghost-deployment
+kubectl rollout history deployment/ghost-deployment
+```
+
 À partir de ces informations, que pouvez-vous dire par rapport au nombre de Pods gérés par ce Deployment ?
 
 ### 3. Analyse des Pods et ReplicaSets
 
 À l'aide de *kubectl*, listez :
 - Les Pods associés à ce Deployment
+```bash
+kubectl get pods -l app=ghost
+```
 - Les ReplicaSets créés
 - Les détails des Pods
 
@@ -57,6 +67,12 @@ Observez le processus de scaling et l'état des Pods.
 
 Simulez un problème en mettant à jour vers une version potentiellement problématique (*ghost:alpine*).
 Tracez ce changement, observez les éventuels problèmes, puis effectuez un rollback vers la version précédente.
+
+```bash
+kubectl rollout history deployment/ghost-deployment
+kubectl annotate deployment/ghost-deployment kubernetes.io/change-cause="Rollback initial ghost application v4.0"
+```
+
 Documentez le rollback avec une annotation appropriée.
 
 ### 8. Tests de résilience
