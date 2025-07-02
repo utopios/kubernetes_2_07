@@ -53,4 +53,4 @@ Ajoutez :
   - Requests : `256Mi` mémoire, `200m` CPU
   - Limits : `512Mi` mémoire, `500m` CPU
 - **Grace period** : `30 secondes`
-- **Security context** : utilisateur non-root
+

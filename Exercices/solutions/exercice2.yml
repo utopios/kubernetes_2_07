@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ghost-deployment
+  annotations:
+    kubernetes.io/change-cause: "update ghost application v5.0"
+    deployment.kubernetes.io/revision: "2"
+spec:
+  replicas: 3
+  revisionHistoryLimit: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: ghost
+  template:
+    metadata:
+      labels:
+        app: ghost
+    spec:
+      containers:
+      - name: ghost
+        image: ghost:5
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        ports:
+        - containerPort: 2368
+        # Startup Probe - vérifie que Ghost démarre correctement
+        startupProbe:
+          httpGet:
+            path: /ghost/api/v4/admin/site/
+            port: 2368
+            httpHeaders:
+            - name: Accept
+              value: application/json
+            - name: User-Agent
+              value: k8s-startup-probe
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+          successThreshold: 1
+        
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "=== Ghost PostStart Hook ===" 
+                mkdir -p /var/log/ghost
+                echo "Ghost container started at $(date)" > /var/log/ghost/startup.log
+                echo "Initializing Ghost application..." >> /var/log/ghost/startup.log
+                sleep 5
+                echo "PostStart hook completed at $(date)" >> /var/log/ghost/startup.log
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "=== Ghost PreStop Hook ==="
+                echo "Ghost container stopping at $(date)" > /var/log/ghost/shutdown.log
+                echo "Initiating graceful shutdown..." >> /var/log/ghost/shutdown.log
+                # Permettre aux connexions existantes de se terminer
+                sleep 10
+                echo "PreStop hook completed at $(date)" >> /var/log/ghost/shutdown.log
+        
+        # Readiness Probe - vérifie que Ghost peut recevoir du trafic
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 2368
+            httpHeaders:
+            - name: User-Agent
+              value: k8s-readiness-probe
+            - name: Accept
+              value: text/html
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        
+        # Liveness Probe - vérifie que Ghost fonctionne correctement
+        livenessProbe:
+          httpGet:
+            path: /ghost/api/v4/admin/users/me/
+            port: 2368
+            httpHeaders:
+            - name: Accept
+              value: application/json
+            - name: User-Agent
+              value: k8s-liveness-probe
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 2
+          successThreshold: 1
