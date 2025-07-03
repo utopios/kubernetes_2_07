@@ -85,3 +85,85 @@ Vous devez avoir la solution Ghost fonctionnelle avec :
   - DNS (port 53)
   - Internet pour les mises à jour (optionnel)
 
+
+
+### Schéma
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                EXTERNE                                      │
+│  🌍 Internet / Utilisateurs                                                │
+│                                                                             │
+│  💻 curl http://localhost:30080                                            │
+│  🌐 curl http://ghost.local (si Ingress)                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ Port 30080 (NodePort)
+                                      │ ✅ Autorisé par ingress: - {}
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CLUSTER K3D                                   │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │                         NODE k3d-ghost-blog-server-0                    │ │
+│ │                                                                         │ │
+│ │  🔧 Service: ghost-nodeport-service                                     │ │
+│ │     Type: NodePort                                                      │ │
+│ │     Port: 80 → 2368                                                     │ │
+│ │     NodePort: 30080                                                     │ │
+│ │                                  │                                      │ │
+│ │                                  │ Port 2368                            │ │
+│ │                                  ▼                                      │ │
+│ │  ┌─────────────────────────────────────────────────────────────────┐   │ │
+│ │  │                      GHOST PODS                                 │   │ │
+│ │  │  📦 ghost-pod-1        📦 ghost-pod-2                          │   │ │
+│ │  │  Labels: app=ghost     Labels: app=ghost                       │   │ │
+│ │  │  Port: 2368           Port: 2368                               │   │ │
+│ │  │                                                                 │   │ │
+│ │  │  🔒 NetworkPolicy: ghost-network-policy                        │   │ │
+│ │  │  ┌─────────────────────────────────────────────────────────┐   │   │ │
+│ │  │  │ INGRESS (Trafic ENTRANT)                               │   │   │ │
+│ │  │  │ ✅ - {} (depuis partout)                               │   │   │ │
+│ │  │  │ ✅ - from: podSelector: app=ghost (entre pods Ghost)   │   │   │ │
+│ │  │  │    ports: TCP/2368                                     │   │   │ │
+│ │  │  │                                                         │   │   │ │
+│ │  │  │ EGRESS (Trafic SORTANT)                                │   │   │ │
+│ │  │  │ ✅ → MySQL (app=mysql) port TCP/3306                   │   │   │ │
+│ │  │  │ ✅ → DNS (to: {}) ports UDP/53, TCP/53                │   │   │ │
+│ │  │  │ ✅ → Internet (to: {}) port TCP/443                    │   │   │ │
+│ │  │  └─────────────────────────────────────────────────────────┘   │   │ │
+│ │  └─────────────────────────────────────────────────────────────────┘   │ │
+│ │                                  │                                      │ │
+│ │                                  │ Port 3306                            │ │
+│ │                                  │ ✅ Autorisé par mysql-network-policy │ │
+│ │                                  ▼                                      │ │
+│ │  ┌─────────────────────────────────────────────────────────────────┐   │ │
+│ │  │                      MYSQL POD                                  │   │ │
+│ │  │  📦 mysql-pod-0                                                 │   │ │
+│ │  │  Labels: app=mysql                                              │   │ │
+│ │  │  Port: 3306                                                     │   │ │
+│ │  │                                                                 │   │ │
+│ │  │  🔒 NetworkPolicy: mysql-network-policy                        │   │ │
+│ │  │  ┌─────────────────────────────────────────────────────────┐   │   │ │
+│ │  │  │ INGRESS (Trafic ENTRANT)                               │   │   │ │
+│ │  │  │ ✅ SEULEMENT depuis podSelector: app=ghost             │   │   │ │
+│ │  │  │    ports: TCP/3306                                     │   │   │ │
+│ │  │  │ ❌ Tout autre trafic BLOQUÉ                            │   │   │ │
+│ │  │  └─────────────────────────────────────────────────────────┘   │   │ │
+│ │  └─────────────────────────────────────────────────────────────────┘   │ │
+│ │                                                                         │ │
+│ │  🔧 Service: mysql-service                                              │ │
+│ │     Type: ClusterIP                                                     │ │
+│ │     ClusterIP: 10.43.x.x                                                │ │
+│ │     Port: 3306 → 3306                                                   │ │
+│ │                                                                         │ │
+│ │  🔧 Service: ghost-clusterip-service                                    │ │
+│ │     Type: ClusterIP                                                     │ │
+│ │     ClusterIP: 10.43.x.x                                                │ │
+│ │     Port: 80 → 2368                                                     │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  🔒 NetworkPolicy: default-deny-all                                        │
+│     Bloque TOUT le trafic par défaut                                       │
+│     Seules les exceptions explicites sont autorisées                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
