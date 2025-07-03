@@ -6,5 +6,5 @@ provisioner: rancher.io/local-path
 parameters:
   hostPath: "/mnt/disks/ssd"
 reclaimPolicy: Delete
-volumeBindingMode: waitForFirstConsumer
+volumeBindingMode: Immediate
 allowVolumeExpansion: true
