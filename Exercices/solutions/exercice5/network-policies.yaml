@@ -1,0 +1,70 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}  # S'applique à tous les pods
+  policyTypes:
+  - Ingress
+
+--- 
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mysql-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: mysql
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: ghost
+    ports:
+    - protocol: TCP
+      port: 3306
+
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ghost-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: ghost
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - {}  # Autoriser tout le trafic entrant (NodePort depuis l'extérieur)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: ghost
+    ports:
+    - protocol: TCP
+      port: 2368
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: mysql
+    ports:
+    - protocol: TCP
+      port: 3306
+  - to: []  # DNS et autres services système
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to: []  # Autoriser HTTPS pour les mises à jour Ghost
+    ports:
+    - protocol: TCP
+      port: 443
