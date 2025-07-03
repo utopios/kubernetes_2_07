@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-headless
+spec:
+  clusterIP: None  # ← HEADLESS !
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+spec:
+  serviceName: mongo-headless  # ← Référence au headless service
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:4.4
+        ports:
+        - containerPort: 27017
+
+### Accèder aux Pods MongoDB
+# mongo-0.mongo-headless.default.svc.cluster.local:27017

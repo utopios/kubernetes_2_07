@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  labels:
+    app: webapp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - name: webapp
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: html
+        configMap:
+          name: webapp-content
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webapp-content
+data:
+  index.html: |
+    <html>
+    <body>
+      <h1>Hello from Pod: __HOSTNAME__</h1>
+      <p>Service Type: ClusterIP Demo</p>
+    </body>
+    </html>

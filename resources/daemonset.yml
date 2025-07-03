@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-collector
+  labels:
+    app: log-collector
+spec:
+  selector:
+    matchLabels:
+      app: log-collector
+  template:
+    metadata:
+      
+      labels:
+        app: log-collector
+    spec:
+      containers:
+      - name: log-collector
+        image: busybox:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |  
+            echo "=== Collecte des logs ==="
+            while true; do
+              echo "Collecte des logs à $(date)" >> /var/log/collector.log
+              sleep 10
+            done
+        
