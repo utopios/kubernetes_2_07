@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-shared-app
+spec:
+  replicas: 6  # Plus de replicas que de nœuds
+  selector:
+    matchLabels:
+      app: nfs-shared-app
+  template:
+    metadata:
+      labels:
+        app: nfs-shared-app
+    spec:
+      containers:
+      - name: shared-writer
+        image: alpine:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            echo "=== Pod $(hostname) démarré ==="
+            echo "Nœud: $(cat /etc/hostname)"
+            
+            # Création d'un fichier unique par Pod
+            echo "Pod: $(hostname)" > /shared/pod-$(hostname).txt
+            echo "Nœud: $(cat /etc/hostname)" >> /shared/pod-$(hostname).txt
+            echo "Timestamp: $(date)" >> /shared/pod-$(hostname).txt
+            
+            # Écriture continue dans un log partagé
+            while true; do
+              echo "$(date) - Log de $(hostname)" >> /shared/shared-log.txt
+              
+              # Affichage de tous les fichiers partagés
+              echo "=== Fichiers partagés visibles ==="
+              ls -la /shared/
+              
+              sleep 15
+            done
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /shared
+      volumes:
+      - name: shared-storage
+        persistentVolumeClaim:
+          claimName: nfs-pvc

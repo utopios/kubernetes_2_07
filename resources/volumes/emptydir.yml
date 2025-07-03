@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: emptydir-demo
+spec:
+  containers:
+  # Conteneur producteur de données
+  - name: producer
+    image: alpine:latest
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - |
+        while true; do
+          echo "Production: $(date)" >> /shared/production.log
+          sleep 5
+        done
+    volumeMounts:
+    - name: shared-storage
+      mountPath: /shared
+  
+  # Conteneur consommateur de données
+  - name: consumer
+    image: alpine:latest
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - |
+        while true; do
+          echo "=== Lecture des données partagées ==="
+          cat /shared/production.log 2>/dev/null || echo "Pas encore de données"
+          sleep 10
+        done
+    volumeMounts:
+    - name: shared-storage
+      mountPath: /shared
+  
+  volumes:
+  # Volume emptyDir - existe uniquement pendant la vie du Pod
+  - name: shared-storage
+    emptyDir:
+      medium: "" # Utilise le système de fichiers par défaut
+      
+      sizeLimit: 1Gi # Limite de taille du volume

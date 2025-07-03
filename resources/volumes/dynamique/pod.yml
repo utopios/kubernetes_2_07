@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dynamic-storage-demo
+spec:
+  containers:
+  - name: app
+    image: alpine:latest
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - |
+        echo "=== Stockage dynamique provisioned ==="
+        df -h /dynamic-data
+        echo "Création de données dans le volume dynamique"
+        dd if=/dev/zero of=/dynamic-data/largefile.dat bs=1M count=100
+        ls -lh /dynamic-data/
+        sleep 3600
+    volumeMounts:
+    - name: dynamic-storage
+      mountPath: /dynamic-data
+  volumes:
+  - name: dynamic-storage
+    persistentVolumeClaim:
+      claimName: dynamic-pvc

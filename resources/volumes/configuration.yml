@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  database.properties: |
+    host=localhost
+    port=5432
+    database=myapp
+  user: USER_NAME
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: configmap-demo
+spec:
+  containers:
+  - name: app
+    image: alpine:latest
+    env:
+    - name: USER
+      valueFrom:
+        configMapKeyRef:
+          name: app-config
+          key: user
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - |
+        echo "=== Configuration chargée ==="
+        cat /config/database.properties
+      
+        sleep 3600
+    volumeMounts:
+    - name: config-volume
+      mountPath: /config
+  volumes:
+  # Volume ConfigMap - injecte la configuration
+  - name: config-volume
+    configMap:
+      name: app-config

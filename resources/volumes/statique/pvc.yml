@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-pvc
+spec:
+  # Modes d'accès demandés
+  accessModes:
+    - ReadWriteOnce
+  
+  # Classe de stockage
+  storageClassName: local-path
+  
+  # Ressources demandées
+  resources:
+    requests:
+      storage: 500Mi
+  
+  
