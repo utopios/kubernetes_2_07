@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: result
+  name: result
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: result
+  template:
+    metadata:
+      labels:
+        app: result
+    spec:
+      containers:
+        - image: mohamed1780/result
+          name: result
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+              name: result
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+        - image: mohamed1780/result-ui
+          name: result-ui
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: result-ui
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+      imagePullSecrets:
+      - name: secretdockeraccess
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: result
+  name: result
+spec:
+  type: NodePort
+  ports:
+    - name: "result-ui-service"
+      port: 80
+      targetPort: 80
+      nodePort: 30002
+    - name: "result-service"
+      port: 5000
+      targetPort: 5000
+  selector:
+    app: result
