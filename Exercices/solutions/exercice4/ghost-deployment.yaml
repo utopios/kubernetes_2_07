@@ -25,6 +25,7 @@ spec:
     metadata:
       labels:
         app: ghost
+        client: ghost-mysql
     spec:
       containers:
       - name: ghost

@@ -23,7 +23,7 @@ spec:
   - from:
     - podSelector:
         matchLabels:
-          app: ghost
+          client: ghost-mysql
     ports:
     - protocol: TCP
       port: 3306

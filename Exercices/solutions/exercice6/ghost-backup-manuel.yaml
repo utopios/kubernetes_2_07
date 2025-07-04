@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ghost-backup-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ghost-backup-manual
+  labels:
+    app: ghost-backup
+    type: manual
+spec:
+  template:
+    metadata:
+      labels:
+        app: ghost-backup
+        type: manual
+        client: ghost-mysql
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: mysql-backup
+        image: mysql:8.0
+        env:
+        - name: MYSQL_HOST
+          value: "mysql-service"
+        - name: MYSQL_USER
+          value: "ghost"
+        - name: MYSQL_PASSWORD
+          value: "ghostpassword"
+        - name: MYSQL_DATABASE
+          value: "ghost"
+        command:
+        - /bin/bash
+        - -c
+        - |
+          while true; do
+            echo "=== Sauvegarde en cours ==="
+            BACKUP_FILE="/backup/ghost-backup-$(date +%Y-%m-%d-%H-%M).sql"
+            echo "Sauvegarde vers: $BACKUP_FILE"
+            
+            mysqldump -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE > $BACKUP_FILE
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Sauvegarde réussie: $BACKUP_FILE"
+              echo "Taille: $(du -h $BACKUP_FILE | cut -f1)"
+            else
+              echo "❌ Échec de la sauvegarde"
+            fi
+            
+            echo "Attente de 24 heures..."
+            sleep 86400  # 24 heures
+          done
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backup
+      volumes:
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: ghost-backup-pvc
+        
