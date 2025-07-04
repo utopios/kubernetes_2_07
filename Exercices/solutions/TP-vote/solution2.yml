@@ -1,0 +1,1017 @@
+# ============================================================================
+# NAMESPACE ET SÉCURITÉ
+# ============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vote-app
+  labels:
+    name: vote-app
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# Secret pour PostgreSQL
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: vote-app
+type: Opaque
+data:
+  password: cG9zdGdyZXNfcGFzc3dvcmQ=  # postgres_password en base64
+
+---
+# Secret pour Docker Registry
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secretdockeraccess
+  namespace: vote-app
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6e319  # Configuration Docker vide
+
+---
+# ServiceAccount pour les services
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vote-app-sa
+  namespace: vote-app
+
+---
+# ResourceQuota pour limiter les ressources
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: vote-app-quota
+  namespace: vote-app
+spec:
+  hard:
+    requests.cpu: "3"
+    requests.memory: 2Gi
+    limits.cpu: "6"
+    limits.memory: 4Gi
+    pods: "10"
+    persistentvolumeclaims: "2"
+    services: "10"
+
+---
+# LimitRange pour définir les limites par défaut
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: vote-app-limits
+  namespace: vote-app
+spec:
+  limits:
+  - default:
+      cpu: "500m"
+      memory: "512Mi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    type: Container
+
+# ============================================================================
+# VOLUMES PERSISTANTS
+# ============================================================================
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: standard
+  hostPath:
+    path: /data/postgres
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: vote-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+# ============================================================================
+# VOLUMES PERSISTANTS
+# ============================================================================
+
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: standard
+  hostPath:
+    path: /data/redis
+
+# ============================================================================
+# CONFIGMAPS
+# ============================================================================
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: vote-app
+data:
+  POSTGRES_DB: "votes"
+  PGDATA: "/var/lib/postgresql/data/pgdata"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: vote-app
+data:
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  POSTGRES_HOST: "db"
+  POSTGRES_PORT: "5432"
+
+# ============================================================================
+# POSTGRESQL (StatefulSet avec volume persistant)
+# ============================================================================
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: vote-app
+  labels:
+    app: db
+    tier: database
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  # VOLUME TEMPLATE POUR POSTGRESQL
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+      labels:
+        app: db
+    spec:
+      accessModes: 
+        - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 10Gi
+  template:
+    metadata:
+      labels:
+        app: db
+        tier: database
+    spec:
+      serviceAccountName: vote-app-sa
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 999
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+          # MONTAGE DU VOLUME PERSISTANT
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      imagePullSecrets:
+        - name: secretdockeraccess
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: vote-app
+  labels:
+    app: db
+    tier: database
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: db
+
+# ============================================================================
+# REDIS (StatefulSet avec volume persistant)
+# ============================================================================
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: vote-app
+  labels:
+    app: redis
+    tier: cache
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  # VOLUME TEMPLATE POUR REDIS
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-storage
+      labels:
+        app: redis
+    spec:
+      accessModes: 
+        - ReadWriteOnce
+      storageClassName: standard
+      resources:
+        requests:
+          storage: 5Gi
+  template:
+    metadata:
+      labels:
+        app: redis
+        tier: cache
+    spec:
+      serviceAccountName: vote-app-sa
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 999
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 6379
+              name: redis
+          # MONTAGE DU VOLUME PERSISTANT
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --dir
+            - /data
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      imagePullSecrets:
+        - name: secretdockeraccess
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: vote-app
+  labels:
+    app: redis
+    tier: cache
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  selector:
+    app: redis
+
+# ============================================================================
+# WORKER (Deployment optimisé)
+# ============================================================================
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: vote-app
+  labels:
+    app: worker
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        tier: backend
+    spec:
+      serviceAccountName: vote-app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: mohamed1780/worker
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+          envFrom:
+            - configMapRef:
+                name: app-config
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "ps aux | grep worker | grep -v grep"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      imagePullSecrets:
+        - name: secretdockeraccess
+
+# ============================================================================
+# VOTE (Deployment séparé en 2 services)
+# ============================================================================
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vote
+  namespace: vote-app
+  labels:
+    app: vote
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vote
+  template:
+    metadata:
+      labels:
+        app: vote
+        tier: frontend
+    spec:
+      serviceAccountName: vote-app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vote
+          image: mohamed1780/vote
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 5000
+              name: vote
+          envFrom:
+            - configMapRef:
+                name: app-config
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      imagePullSecrets:
+        - name: secretdockeraccess
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vote-ui
+  namespace: vote-app
+  labels:
+    app: vote-ui
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vote-ui
+  template:
+    metadata:
+      labels:
+        app: vote-ui
+        tier: frontend
+    spec:
+      serviceAccountName: vote-app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vote-ui
+          image: mohamed1780/vote-ui
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 80
+              name: vote-ui
+          env:
+            - name: VOTE_API_URL
+              value: "http://vote:5000"
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      imagePullSecrets:
+        - name: secretdockeraccess
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote
+  namespace: vote-app
+  labels:
+    app: vote
+    tier: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: vote
+      port: 5000
+      targetPort: 5000
+  selector:
+    app: vote
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote-ui
+  namespace: vote-app
+  labels:
+    app: vote-ui
+    tier: frontend
+spec:
+  type: NodePort
+  ports:
+    - name: vote-ui
+      port: 80
+      targetPort: 80
+      nodePort: 30001
+  selector:
+    app: vote-ui
+
+# ============================================================================
+# RESULT (Deployment séparé en 2 services)
+# ============================================================================
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result
+  namespace: vote-app
+  labels:
+    app: result
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: result
+  template:
+    metadata:
+      labels:
+        app: result
+        tier: frontend
+    spec:
+      serviceAccountName: vote-app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: result
+          image: mohamed1780/result
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 5000
+              name: result
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+          envFrom:
+            - configMapRef:
+                name: app-config
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      imagePullSecrets:
+        - name: secretdockeraccess
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result-ui
+  namespace: vote-app
+  labels:
+    app: result-ui
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: result-ui
+  template:
+    metadata:
+      labels:
+        app: result-ui
+        tier: frontend
+    spec:
+      serviceAccountName: vote-app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: result-ui
+          image: mohamed1780/result-ui
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 80
+              name: result-ui
+          env:
+            - name: RESULT_API_URL
+              value: "http://result:5000"
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      imagePullSecrets:
+        - name: secretdockeraccess
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: result
+  namespace: vote-app
+  labels:
+    app: result
+    tier: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: result
+      port: 5000
+      targetPort: 5000
+  selector:
+    app: result
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: result-ui
+  namespace: vote-app
+  labels:
+    app: result-ui
+    tier: frontend
+spec:
+  type: NodePort
+  ports:
+    - name: result-ui
+      port: 80
+      targetPort: 80
+      nodePort: 30002
+  selector:
+    app: result-ui
+
+# ============================================================================
+# NETWORK POLICIES (Sécurité réseau)
+# ============================================================================
+
+---
+# Policy par défaut : Interdire tout le trafic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: vote-app
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Policy pour les services frontend (vote-ui, result-ui)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-ui-policy
+  namespace: vote-app
+spec:
+  podSelector:
+    matchLabels:
+      tier: frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - {} # Autoriser tout le trafic entrant (accès externe)
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: vote
+    ports:
+    - protocol: TCP
+      port: 5000
+  - to:
+    - podSelector:
+        matchLabels:
+          app: result
+    ports:
+    - protocol: TCP
+      port: 5000
+  - {} # Autoriser DNS
+
+---
+# Policy pour le service vote
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vote-backend-policy
+  namespace: vote-app
+spec:
+  podSelector:
+    matchLabels:
+      app: vote
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: vote-ui
+    ports:
+    - protocol: TCP
+      port: 5000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Policy pour le service result
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: result-backend-policy
+  namespace: vote-app
+spec:
+  podSelector:
+    matchLabels:
+      app: result
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: result-ui
+    ports:
+    - protocol: TCP
+      port: 5000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: db
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Policy pour le worker
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: worker-policy
+  namespace: vote-app
+spec:
+  podSelector:
+    matchLabels:
+      app: worker
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: db
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Policy pour Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  namespace: vote-app
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: vote
+    - podSelector:
+        matchLabels:
+          app: worker
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Policy pour PostgreSQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-policy
+  namespace: vote-app
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: result
+    - podSelector:
+        matchLabels:
+          app: worker
+    ports:
+    - protocol: TCP
+      port: 5432
