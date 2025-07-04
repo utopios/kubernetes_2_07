@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: single-task-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: single-task-container
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          WORKER_ID=$(hostname)
+          echo "Worker $WORKER_ID démarre"
+          
+          # Chaque worker traite sa propre partie
+          WORKER_INDEX=$((RANDOM % 100))
+          echo "Worker $WORKER_ID traite la partition $WORKER_INDEX"
+          
+          # Simulation de traitement
+          sleep $((10 + RANDOM % 20))
+          
+          echo "Worker $WORKER_ID terminé"
+      restartPolicy: OnFailure
+  completions: 6
+  parallelism: 3
+  
+  
+  

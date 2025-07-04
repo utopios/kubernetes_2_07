@@ -7,3 +7,6 @@ kubectl get pods
 kubectl describe pods <nom_pod>
 ### Port forward
 kubectl port-forward pods/<nom_pod> [port_host]:[Port_pod]
+
+
+### HPA

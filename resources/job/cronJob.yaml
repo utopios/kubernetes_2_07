@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hourly-backup
+spec:
+  #concurrencyPolicy: Allow  # Permet l'exécution simultanée de plusieurs instances
+  #concurrencyPolicy: Forbid  # Interdit l'exécution simultanée de plusieurs instances
+  concurrencyPolicy: Replace  # Remplace l'instance en cours si une nouvelle instance est planifiée
+  schedule: "0 */2 * * *"  # Exécute toutes les heures
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup-container
+            image: busybox
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Démarrage de la sauvegarde horaire"
+              # Simuler une sauvegarde
+              sleep 5
+              echo "Sauvegarde terminée"
+          restartPolicy: OnFailure
+      backoffLimit: 4  # Nombre de tentatives avant d'abandonner
+      completions: 1  # Nombre de fois que le job doit être exécuté
+      parallelism: 1  # Nombre de jobs parallèles autorisés

@@ -34,6 +34,8 @@ spec:
           value: "mysql"
         - name: database__connection__host
           value: "mysql-service"
+        - name: database__connection__port
+          value: "3306"
         - name: database__connection__user
           value: "ghost"
         - name: database__connection__password
