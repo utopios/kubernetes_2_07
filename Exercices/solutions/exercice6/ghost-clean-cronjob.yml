@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ghost-backup-daily
+  labels:
+    app: ghost-backup
+    type: scheduled
+spec:
+  schedule: "0 2 * * *" # Tous les jours à 2h00
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        app: ghost-backup
+        type: daily
+    spec:
+      template:
+        metadata:
+          labels:
+            app: ghost-backup
+            type: daily
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ghost-cleanup
+              image: busybox
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  
+                    echo "=== Nettoyage des logs Ghost ==="
+                    
+                    cd /var/lib/ghost/content
+                    
+                    echo "Fichiers avant nettoyage:"
+                    find . -name "*.log" -type f -exec ls -la {} \; 2>/dev/null || echo "Aucun log trouvé"
+                    
+                    # Supprimer les logs de plus de 7 jours
+                    echo "Suppression des logs anciens..."
+                    find . -name "*.log" -type f -mtime +7 -delete 2>/dev/null || true
+                    
+                    # Supprimer les fichiers temporaires
+                    echo "Suppression des fichiers temporaires..."
+                    find . -name "*.tmp" -type f -delete 2>/dev/null || true
+                    
+                    echo "Fichiers après nettoyage:"
+                    find . -name "*.log" -type f -exec ls -la {} \; 2>/dev/null || echo "Aucun log restant"
+                    
+                    
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "100m"
+              volumeMounts:
+                - name: ghost-content
+                  mountPath: /var/lib/ghost/content
+          volumes:
+            - name: ghost-content
+              persistentVolumeClaim:
+                claimName: ghost-content-pvc

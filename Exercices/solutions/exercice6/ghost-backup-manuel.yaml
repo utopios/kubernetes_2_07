@@ -42,7 +42,6 @@ spec:
         - /bin/bash
         - -c
         - |
-          while true; do
             echo "=== Sauvegarde en cours ==="
             BACKUP_FILE="/backup/ghost-backup-$(date +%Y-%m-%d-%H-%M).sql"
             echo "Sauvegarde vers: $BACKUP_FILE"
@@ -55,10 +54,6 @@ spec:
             else
               echo "❌ Échec de la sauvegarde"
             fi
-            
-            echo "Attente de 24 heures..."
-            sleep 86400  # 24 heures
-          done
         resources:
           requests:
             memory: "128Mi"
