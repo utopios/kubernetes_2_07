@@ -1,0 +1,24 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionWebhook
+metadata:
+  name: webhook-injector
+  namespace: namespace-pss
+  labels:
+    app: webhook-injector
+webhooks:
+- name: webhook-injector.namespace-pss.svc
+  clientConfig:
+    service:
+      name: webhook-injector  
+      namespace: namespace-pss
+      path: /mutate
+      caBundle: <CA_BUNDLE>  # Replace with the actual CA bundle
+  rules:
+  - operations: ["CREATE", "UPDATE"]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  namespaceSelector:
+    matchLabels:
+      pod-security.kubernetes.io/enforce: restricted
+  sideEffects: None
