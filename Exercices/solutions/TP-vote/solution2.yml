@@ -9,7 +9,7 @@ metadata:
   name: vote-app
   labels:
     name: vote-app
-    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce: privileged 
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
 
@@ -897,6 +897,9 @@ spec:
     ports:
     - protocol: TCP
       port: 5000
+  - ports:
+    - protocol: TCP
+      port: 5000
   egress:
   - to:
     - podSelector:
@@ -905,6 +908,10 @@ spec:
     ports:
     - protocol: TCP
       port: 6379
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
 
 ---
 # Policy pour le service result
@@ -928,6 +935,9 @@ spec:
     ports:
     - protocol: TCP
       port: 5000
+  - ports:
+    - protocol: TCP
+      port: 5000
   egress:
   - to:
     - podSelector:
@@ -936,7 +946,10 @@ spec:
     ports:
     - protocol: TCP
       port: 5432
-
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
 ---
 # Policy pour le worker
 apiVersion: networking.k8s.io/v1
@@ -965,6 +978,7 @@ spec:
     ports:
     - protocol: TCP
       port: 5432
+  
 
 ---
 # Policy pour Redis
